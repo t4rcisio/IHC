@@ -11,22 +11,6 @@ O sistema também possui login, criação de conta, detecção de fogões compat
 
 ---
 
-## 📸 Capturas de Tela
-
-### 🔐 Tela de Login e Cadastro
-![Tela Login](7dfdfb7a-22d7-441f-925d-bff0fe465963.png)
-
-### 📡 Seleção do Fogão
-![Sel Fogão](bbdd903b-4e1f-4e94-8af3-b44e5269f287.png)
-
-### 🔥 Monitoramento das Bocas
-![Bocas](d5779de2-5d9a-4b54-9db8-5c1e68615f9b.png)
-
-### ⚙️ Tela de Configurações
-![Config](9f6c8dce-efcb-4387-8742-fea6a4991a46.png)
-
----
-
 ## 🧩 Funcionalidades
 
 ### 👤 Autenticação
@@ -55,7 +39,6 @@ Cada boca exibe:
 ## 🏗️ Tecnologias Utilizadas
 - **Python 3.12+**  
 - **PyQt6**  
-- Ícones em SVG  
 - Estilos personalizados via CSS interno  
 - Arquitetura modular com múltiplas janelas
 
