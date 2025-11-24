@@ -48,7 +48,7 @@ Cada boca exibe:
 
 ### 1️⃣ Instale as dependências
 ```
-pip install pyqt6
+pip install -m requirements.txt
 ```
 
 ### 2️⃣ Execute o app
