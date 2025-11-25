@@ -1,3 +1,4 @@
+import copy
 import ctypes
 import datetime
 import multiprocessing
@@ -5,12 +6,16 @@ import os.path
 import random
 import re
 import sys
+import traceback
 
 from PyQt6 import QtWidgets, QtGui, QtCore
+from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QIcon, QIntValidator
 
-from pages import home, buscar, detalhes_fogao, config, login
+from pages import home, buscar, detalhes_fogao, config, login, alert
 from pages import elements
+from pages.elements import ToggleSwitch
+
 
 class Fogao_Seguro:
 
@@ -68,6 +73,10 @@ class Fogao_Seguro:
         self.login_page = login.Ui_Form()
         self.login_page.setupUi(self.login_widget)
 
+        self.alerta_widget = QtWidgets.QWidget()
+        self.alerta_page = alert.Ui_Form()
+        self.alerta_page.setupUi(self.alerta_widget)
+
         self.login_page.create.clicked.connect(lambda state: self.create())
         self.login_page.login.clicked.connect(lambda state: self.login())
         self.login_page.password.setEchoMode(QtWidgets.QLineEdit.EchoMode.Password)
@@ -77,6 +86,7 @@ class Fogao_Seguro:
         self.mPage.stackedWidget.insertWidget(1, self.detalhes_widget)
         self.mPage.stackedWidget.insertWidget(2, self.config_widget)
         self.mPage.stackedWidget.insertWidget(3, self.login_widget)
+        self.mPage.stackedWidget.insertWidget(4, self.alerta_widget)
 
 
         self.nomes_fogao = {
@@ -104,15 +114,24 @@ class Fogao_Seguro:
         self.detalhes_page.voltar.clicked.connect(lambda state: self.mPage.stackedWidget.setCurrentIndex(0))
         self.mPage.config.clicked.connect(lambda state: self.open_config() )
         self.config_page.voltar.clicked.connect(lambda state: self.mPage.stackedWidget.setCurrentIndex(0))
+        self.alerta_page.voltar.clicked.connect(lambda state: self.mPage.stackedWidget.setCurrentIndex(0))
 
         self.config_page.salvar.clicked.connect(lambda state: self.__save())
         self.config_page.logout.clicked.connect(lambda state: self.log_out())
 
         self.mPage.stackedWidget.currentChanged.connect(self.__page_change)
         self.current_user = False
+        self.current_fogao = False
+        self.aletText = self.alerta_page.label_2.text()
 
         self.show_buscar()
         self.__page_change()
+
+        self.timer = QTimer()
+        self.timer.setInterval(30 * 1000)
+        self.timer.timeout.connect(self.monitor)
+        self.timer.start()
+        self.monitor()
 
     def __page_change(self):
 
@@ -371,6 +390,34 @@ class Fogao_Seguro:
             self.b_layout.addWidget(q_row)
 
 
+    def monitor(self):
+
+        try:
+            alert_conf = eval(open("config", "r", encoding="UTF-8").read())
+            if not isinstance(alert_conf, dict):
+                alert_conf = False
+        except:
+            alert_conf = False
+
+        for name in self.nomes_fogao:
+            index = 1
+            for boca in self.nomes_fogao[name]["detalhes"]:
+                s_tempo = self.nomes_fogao[name]["detalhes"][boca]['start']
+                self.__vefificaAlerta(s_tempo, name, index, alert_conf)
+                index+=1
+
+
+
+
+        if self.mPage.stackedWidget.currentIndex() != 1:
+            return
+
+        if not self.current_fogao in self.nomes_fogao:
+            return
+
+        self.open_details(self.current_fogao)
+
+
 
     def open_details(self, name):
 
@@ -379,6 +426,10 @@ class Fogao_Seguro:
         self.detalhes_page.label.setText('<html><head/><body><p align="center"><span style=" font-size:12pt; font-weight:600; color:#2776dd;">'+name+'</span></p></body></html>')
 
         self.clear_layout(self.d_layout)
+
+        self.current_fogao = name
+
+
 
         index = 1
         for boca in self.nomes_fogao[name]["detalhes"]:
@@ -410,12 +461,13 @@ class Fogao_Seguro:
 
             q_bar = elements.FlameLevelBar(level=self.nomes_fogao[name]["detalhes"][boca]['level'])
 
-            tempo = self.nomes_fogao[name]["detalhes"][boca]['start']
+            s_tempo = self.nomes_fogao[name]["detalhes"][boca]['start']
 
-            if tempo != False:
-                tempo = self.calcula_diferenca(tempo)
+            if s_tempo != False:
+                tempo = str(self.calcula_diferenca(s_tempo)) + " min."
             else:
                 tempo = "N/A"
+
 
             q_tempo = QtWidgets.QLineEdit()
             q_tempo.setFixedHeight(30)
@@ -431,15 +483,65 @@ class Fogao_Seguro:
             q_btn.setIconSize(QtCore.QSize(30, 30))
             q_btn.clicked.connect(lambda state, k=name, j=index: self.open_details_boca(k, j))
 
+            switch = ToggleSwitch(checked=self.nomes_fogao[name]["detalhes"][boca]['state'])  # desligado
+            switch.toggled.connect(lambda state, s=switch, f_nome=name, f_boca=index :self.trocar_estado_fogao(s, f_nome, f_boca))
+
+
             q_layout.addWidget(state_btn, 1)
             q_layout.addWidget(q_name,5)
             q_layout.addWidget(q_bar, 3)
             q_layout.addWidget(q_tempo, 2)
-            #q_layout.addWidget(q_btn, 1)
+            q_layout.addWidget(switch, 1)
 
             self.d_layout.addWidget(q_row)
             index +=1
 
+    def __vefificaAlerta(self,tempo, fogao, boca, config):
+
+        try:
+            if tempo == False:
+                return
+            if not self.current_user:
+                return
+
+            s_tempo = self.calcula_diferenca(tempo)
+
+            if config['notifica_gen']:
+
+                if config['not_fs']:
+                    if s_tempo > int(config['time_1']):
+                        self.mPage.stackedWidget.setCurrentIndex(4)
+
+                        text = copy.copy(self.aletText)
+                        text = text.replace("#Boca", str(boca))
+                        text = text.replace("#Fogao", str(fogao))
+                        self.alerta_page.label_2.setText(text)
+                        self.nomes_fogao[fogao]["detalhes"][boca] = {"state": 0, "level": 0, "com_panela": True,"start": False}
+
+                if config['not_f']:
+                    if s_tempo > int(config['time_2']):
+                        self.mPage.stackedWidget.setCurrentIndex(4)
+
+                        text = copy.copy(self.aletText)
+                        text = text.replace("#Boca", str(boca))
+                        text = text.replace("#Fogao", str(fogao))
+                        self.alerta_page.label_2.setText(text)
+                        self.nomes_fogao[fogao]["detalhes"][boca] = {"state": 0, "level": 0, "com_panela": True,"start": False}
+        except:
+            print(traceback.format_exc())
+
+
+
+    def trocar_estado_fogao(self, switch, fogao, boca):
+
+        if switch.isChecked():
+            print(f"Fogão {fogao} | Boca {boca} LIGADO")
+            self.nomes_fogao[fogao]["detalhes"][boca] = {"state": 1, "level": 1, "com_panela": True, "start": datetime.datetime.now()}
+        else:
+            print(f"Fogão {fogao} | Boca {boca} DESLIGADO")
+            self.nomes_fogao[fogao]["detalhes"][boca] = {"state": 0, "level": 0, "com_panela": True, "start": False}
+
+        self.open_details(fogao)
 
     def open_details_boca(self, nome, boca):
 
@@ -455,7 +557,7 @@ class Fogao_Seguro:
 
         agora = datetime.datetime.now()
         diff = agora - tempo
-        return str(int(diff.total_seconds() / 60)) + " min."
+        return int(diff.total_seconds() / 60)
 
     def datetime_aleatorio_passado(self):
         # sorteia entre 5 e 30 minutos
